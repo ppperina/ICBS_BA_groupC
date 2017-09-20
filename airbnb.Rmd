@@ -1,0 +1,195 @@
+---
+title: "Airbnb in London - How much to pay?"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float: true
+    toc_depth: 2
+    # css: style.css
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+bibliography: bibliography.bib
+---
+
+```{r include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(rgdal)
+# install.packages("broom")
+load("data.RData")
+data <- tbl_df(data)
+```
+
+# Introduction
+
+Determinants of the Price
+
+Assumption: Rating and Location have a major impact on the price of the Airbnb
+
+How do the ratings work: https://www.airbnb.co.uk/help/article/1257/how-do-star-ratings-work
+
+# Description of the dataset
+
+## Initial dataset
+
+Source: Inside Airbnb
+
+Link to dataset:  http://data.insideairbnb.com/united-kingdom/england/london/2017-03-04/data/listings.csv.gz
+
+London Map: https://github.com/Robinlovelace/Creating-maps-in-R
+
+```{r results='hold'}
+print(paste("Observations:",nrow(data)))
+print(paste("Variables:",ncol(data)))
+```
+
+## Custom adjustments
+
+<h3>Select: Variables of interest</h3>
+
+General
+last_scraped (date)
+host_id
+room_type (as categories)
+
+Price
+
+
+Number of Reviews
+Review Rating
+
+Location (latitude / longitude)
+
+```{r}
+data_short <- data %>% select(last_scraped, host_id, room_type, price, guests_included,
+                              number_of_reviews, review_scores_rating,
+                              latitude, longitude)
+```
+
+<h3>Filter: Observations of interest</h3>
+
+Filter all Airbnbs that do not have a Rating (price and location always included)
+
+```{r}
+data_short <- data_short %>% filter(!is.na(review_scores_rating))
+```
+
+Filter only Private / Shared Rooms, no full Apartments
+
+```{r}
+data_short <- data_short %>% filter(grepl("room$", room_type))
+```
+
+<h3>Mutate: Price per Person and Distance</h3>
+
+Price per Person
+
+```{r}
+data_short$price <- as.double(substr(paste(data_short$price), 2, 500))
+data_short <- data_short %>% filter(!is.na(price))
+data_short <- data_short %>% mutate(price_pp = price / guests_included)
+data_short <- data_short %>% filter(!is.na(price_pp))
+
+data_short <- data_short %>% filter(price_pp < 150)
+```
+
+Midpoint London Westminster -> Distance from midpoint by using 
+Coordinates of Westminster (source Google)
+latitude 51.5002
+longitude -0.1332
+
+$Dist=\sqrt{(lo_{West}-lo_{BnB})2+(la_{West}-la_{BnB})2}$
+
+```{r}
+data_short <- data_short %>% mutate(dist = sqrt((51.5002 - round(latitude, 4)) ^ 2 +
+                                                  (-0.1332 - round(longitude, 4)) ^ 2))
+```
+
+
+<h4>Let´s take a look at our new dataset</h4>
+
+```{r}
+glimpse(data_short)
+```
+
+```{r results='hide'}
+lnd <- readOGR(dsn = "map_data", layer = "london_sport")
+lnd_f <- broom::tidy(lnd)
+lnd$id <- row.names(lnd)
+lnd_f <- left_join(lnd_f, lnd@data)
+map <- ggplot(lnd_f, aes(long, lat, group = group, fill = Partic_Per)) + geom_polygon() + coord_equal()
+```
+
+```{r}
+map
+```
+
+
+# Descriptive statistics
+
+## Univariant descriptives
+
+<h3>Groups within the data</h3>
+
+```{r}
+d1 <- data_short %>% group_by(room_type) %>% summarise(n = n())
+g1 <- d1 %>% ggplot(aes(x = room_type, y = n)) + geom_bar(stat = "identity")
+
+d2 <- data_short %>% group_by(number_of_reviews) %>% summarise(n = n())
+g2 <- d2 %>% ggplot(aes(x = number_of_reviews, y = n)) + geom_bar(stat = "identity")
+
+d3 <- data_short %>% group_by(host_id) %>% summarise(number_of_listings = n()) %>% group_by(number_of_listings) %>% summarise(n = n())
+g3 <- d3 %>% ggplot(aes(x = number_of_listings, y = n)) + geom_bar(stat = "identity")
+
+grid.arrange(g1, g2, g3, nrow = 3)
+```
+
+Result: Only Grouping by Room Type necessary
+
+<h3>Summary for variables of interest</h3>
+
+```{r results='hold'}
+data_short %>% group_by(room_type) %>% summarise(min = min(price_pp),
+                                                 q_25 = quantile(price_pp, .25),
+                                                 median = median(price_pp),
+                                                 q_75 = quantile(price_pp, .75),
+                                                 max = max(price_pp))
+data_short %>% ggplot(aes(room_type, price_pp)) + geom_boxplot() + coord_flip()
+```
+```{r results='hold'}
+data_short %>% group_by(room_type) %>% summarise(min = min(review_scores_rating),
+                                                 q_25 = quantile(review_scores_rating, .25),
+                                                 median = median(review_scores_rating),
+                                                 q_75 = quantile(review_scores_rating, .75),
+                                                 max = max(review_scores_rating))
+data_short %>% ggplot(aes(room_type, review_scores_rating)) + geom_boxplot() + coord_flip()
+```
+```{r results='hold'}
+data_short %>% group_by(room_type) %>% summarise(min = min(dist),
+                                                 q_25 = quantile(dist, .25),
+                                                 median = median(dist),
+                                                 q_75 = quantile(dist, .75),
+                                                 max = max(dist))
+data_short %>% ggplot(aes(room_type, dist)) + geom_boxplot() + coord_flip()
+```
+
+## Bivariant descriptives
+
+```{r results='hold'}
+data_short %>% ggplot(aes(x = review_scores_rating, y = price_pp)) + geom_point(aes(colour = factor(room_type)))
+data_short %>% group_by(room_type) %>% summarise(cov = cov(review_scores_rating, price_pp), cor = cor(review_scores_rating, price_pp))
+```
+
+```{r results='hold'}
+data_short %>% ggplot(aes(x = dist, y = price_pp)) + geom_point(aes(colour = factor(room_type)))
+data_short %>% group_by(room_type) %>% summarise(cov = cov(dist, price_pp), cor = cor(dist, price_pp))
+```
+
+# Testing and Regression
+
+# Conclusion
+
+# References
