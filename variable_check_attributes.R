@@ -140,7 +140,7 @@ corr_mat <- corr_mat_data[, 2:length(corr_mat_data)]
 round(cor(corr_mat_data, use = "pairwise.complete.obs"), 2)
 # corr of accommodates and bedrooms 0.69, price and bedrooms 0.51, price & accommodates 0.59
 
-# Checking correlations
+# Checking correlations here
 apt_data$bedrooms_cut <- cut(apt_data$bedrooms, c(1,2,3,4,5,6))
 ggplot(data = apt_data) + geom_boxplot(aes(x = apt_data$bedrooms_cut, y = apt_data$accommodates))
 
