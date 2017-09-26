@@ -86,6 +86,10 @@ data$bed_type <- factor(data$bed_type)
 
 data$amenities_n <- NA
 
+data$amenities[5]
+a <- as.character(data$amenities[5])
+find("Kitchen", a)
+
 # for (i in 1:data$amenities){
 #   data$amenities_n[i] <- sapply(gregexpr(",", data$amenities[i]), length) + 1
 # }
@@ -110,6 +114,7 @@ summary(fit3)
 library(usdm)
 corr_df <- data.frame(apt_data$bathrooms, apt_data$bedrooms, apt_data$accommodates)
 vif(corr_df)
+# VIF values are 1.37, 2.27, 2.06 so moderately correlated
 
 # why both private and shared room have a negative impact on price?
 # perhaps indicating it is just a room and not an apartment? YES
